@@ -3,6 +3,7 @@ package com.idempotent.aspect;
 import com.alibaba.fastjson.JSON;
 import com.idempotent.annotation.Idempotent;
 import com.idempotent.config.IdempotentProperties;
+import com.idempotent.dto.IdempotentRecord;
 import com.idempotent.enums.IdempotentTypeEnum;
 import com.idempotent.exception.IdempotentException;
 import com.idempotent.service.TokenService;
@@ -41,6 +42,9 @@ public class IdempotentAspect {
     public Object around(ProceedingJoinPoint joinPoint, Idempotent idempotent) throws Throwable {
         IdempotentTypeEnum type = idempotent.type();
         String key = buildKey(joinPoint, idempotent);
+        String token = getTokenFromRequest();
+        String businessKey = resolveBusinessKey(joinPoint, idempotent);
+        IdempotentRecord record = buildRecord(joinPoint, idempotent);
 
         boolean valid = false;
         try {
@@ -50,6 +54,7 @@ public class IdempotentAspect {
                     break;
                 case PARAM:
                     valid = handleParamType(key, idempotent);
+                    token = "param:" + key;
                     break;
                 case TOKEN_AND_PARAM:
                     valid = handleTokenAndParamType(joinPoint, idempotent, key);
@@ -62,13 +67,70 @@ public class IdempotentAspect {
                 throw new IdempotentException(idempotent.message());
             }
 
+            tokenService.markProcessing(token, businessKey, type, record);
+
             Object result = joinPoint.proceed();
+
+            tokenService.markCompleted(token, businessKey, record);
+
             return result;
+        } catch (Throwable throwable) {
+            if (valid) {
+                tokenService.markFailed(token, businessKey, throwable.getMessage(), record);
+            }
+            throw throwable;
         } finally {
             if (valid && idempotent.deleteKeyWhenFinish()) {
                 cleanup(idempotent, key);
             }
         }
+    }
+
+    private IdempotentRecord buildRecord(ProceedingJoinPoint joinPoint, Idempotent idempotent) {
+        IdempotentRecord record = new IdempotentRecord();
+        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+        Method method = signature.getMethod();
+        record.setClassName(method.getDeclaringClass().getSimpleName());
+        record.setMethodName(method.getName());
+        try {
+            Object[] args = joinPoint.getArgs();
+            if (args != null && args.length > 0) {
+                StringBuilder sb = new StringBuilder();
+                for (Object arg : args) {
+                    if (arg != null && !isRequestOrResponse(arg)) {
+                        sb.append(JSON.toJSONString(arg)).append(";");
+                    }
+                }
+                record.setRequestParam(sb.toString());
+            }
+        } catch (Exception e) {
+            log.warn("序列化请求参数失败", e);
+        }
+        record.setExpireTime(idempotent.expireTime());
+        return record;
+    }
+
+    private String resolveBusinessKey(ProceedingJoinPoint joinPoint, Idempotent idempotent) {
+        if (StringUtils.isBlank(idempotent.paramName())) {
+            return null;
+        }
+        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+        Object[] args = joinPoint.getArgs();
+        String[] paramNames = signature.getParameterNames();
+        for (int i = 0; i < paramNames.length; i++) {
+            if (idempotent.paramName().equals(paramNames[i])) {
+                return args[i] != null ? String.valueOf(args[i]) : null;
+            }
+        }
+        for (Object arg : args) {
+            if (arg != null && !isRequestOrResponse(arg)) {
+                Object fieldValue = getFieldValue(arg, idempotent.paramName());
+                if (fieldValue != null) {
+                    return String.valueOf(fieldValue);
+                }
+            }
+        }
+        return null;
     }
 
     private boolean handleTokenType(Idempotent idempotent) {

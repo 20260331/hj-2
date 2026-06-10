@@ -16,3 +16,4 @@ out/
 .gradle/
 .mvn/
 gh_push_record.md
+*.log

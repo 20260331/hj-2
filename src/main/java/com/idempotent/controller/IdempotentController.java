@@ -1,6 +1,8 @@
 package com.idempotent.controller;
 
 import com.idempotent.annotation.Idempotent;
+import com.idempotent.dto.IdempotentHistoryDTO;
+import com.idempotent.dto.IdempotentStatusDTO;
 import com.idempotent.dto.OrderCreateDTO;
 import com.idempotent.service.TokenService;
 import com.idempotent.util.Result;
@@ -33,6 +35,27 @@ public class IdempotentController {
     public Result<String> getToken(@PathVariable String businessKey) {
         String token = tokenService.generateToken(businessKey);
         return Result.success(token);
+    }
+
+    @GetMapping("/idempotent/status/token/{token}")
+    public Result<IdempotentStatusDTO> getStatusByToken(@PathVariable String token) {
+        IdempotentStatusDTO status = tokenService.getStatusByToken(token);
+        return Result.success(status);
+    }
+
+    @GetMapping("/idempotent/status/business/{businessKey}")
+    public Result<IdempotentStatusDTO> getStatusByBusinessKey(@PathVariable String businessKey) {
+        IdempotentStatusDTO status = tokenService.getStatusByBusinessKey(businessKey);
+        return Result.success(status);
+    }
+
+    @GetMapping("/idempotent/history/{businessKey}")
+    public Result<IdempotentHistoryDTO> getHistoryByBusinessKey(
+            @PathVariable String businessKey,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        IdempotentHistoryDTO history = tokenService.getHistoryByBusinessKey(businessKey, page, size);
+        return Result.success(history);
     }
 
     @PostMapping("/order/create")
