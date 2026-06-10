@@ -167,7 +167,8 @@ public class TokenServiceImpl implements TokenService {
         if (tokenObj == null) {
             IdempotentRecord lastRecord = getLastHistoryRecord(businessKey);
             if (lastRecord != null) {
-                return IdempotentStatusDTO.of(lastRecord.getToken(), businessKey, IdempotentStatusEnum.COMPLETED, 0L, lastRecord);
+                IdempotentStatusEnum status = lastRecord.getStatus() != null ? lastRecord.getStatus() : IdempotentStatusEnum.COMPLETED;
+                return IdempotentStatusDTO.of(lastRecord.getToken(), businessKey, status, 0L, lastRecord);
             }
             return IdempotentStatusDTO.of(null, businessKey, IdempotentStatusEnum.NOT_FOUND, 0L, null);
         }
@@ -204,15 +205,19 @@ public class TokenServiceImpl implements TokenService {
         if (StringUtils.isBlank(token)) {
             return;
         }
+        IdempotentRecord existing = getRecord(token);
         if (record == null) {
-            record = new IdempotentRecord();
+            record = existing != null ? existing : new IdempotentRecord();
         }
         record.setToken(token);
-        record.setBusinessKey(businessKey);
-        record.setType(type);
+        String effectiveBusinessKey = resolveEffectiveBusinessKey(businessKey, record, existing);
+        record.setBusinessKey(effectiveBusinessKey);
+        if (type != null) {
+            record.setType(type);
+        }
         record.setStatus(IdempotentStatusEnum.PROCESSING);
         if (record.getCreateTime() == null) {
-            record.setCreateTime(System.currentTimeMillis());
+            record.setCreateTime(existing != null && existing.getCreateTime() != null ? existing.getCreateTime() : System.currentTimeMillis());
         }
         record.setProcessStartTime(System.currentTimeMillis());
         saveRecord(token, record);
@@ -223,18 +228,17 @@ public class TokenServiceImpl implements TokenService {
         if (StringUtils.isBlank(token)) {
             return;
         }
+        IdempotentRecord existing = getRecord(token);
         if (record == null) {
-            record = getRecord(token);
-            if (record == null) {
-                record = new IdempotentRecord();
-            }
+            record = existing != null ? existing : new IdempotentRecord();
         }
         record.setToken(token);
-        record.setBusinessKey(businessKey);
+        String effectiveBusinessKey = resolveEffectiveBusinessKey(businessKey, record, existing);
+        record.setBusinessKey(effectiveBusinessKey);
         record.setStatus(IdempotentStatusEnum.COMPLETED);
         record.setProcessEndTime(System.currentTimeMillis());
         saveRecord(token, record);
-        addToHistory(businessKey, token, record.getCreateTime() != null ? record.getCreateTime() : System.currentTimeMillis());
+        addToHistory(effectiveBusinessKey, token, record.getCreateTime() != null ? record.getCreateTime() : System.currentTimeMillis());
     }
 
     @Override
@@ -242,19 +246,18 @@ public class TokenServiceImpl implements TokenService {
         if (StringUtils.isBlank(token)) {
             return;
         }
+        IdempotentRecord existing = getRecord(token);
         if (record == null) {
-            record = getRecord(token);
-            if (record == null) {
-                record = new IdempotentRecord();
-            }
+            record = existing != null ? existing : new IdempotentRecord();
         }
         record.setToken(token);
-        record.setBusinessKey(businessKey);
+        String effectiveBusinessKey = resolveEffectiveBusinessKey(businessKey, record, existing);
+        record.setBusinessKey(effectiveBusinessKey);
         record.setStatus(IdempotentStatusEnum.COMPLETED);
         record.setProcessEndTime(System.currentTimeMillis());
         record.setErrorMsg(errorMsg);
         saveRecord(token, record);
-        addToHistory(businessKey, token, record.getCreateTime() != null ? record.getCreateTime() : System.currentTimeMillis());
+        addToHistory(effectiveBusinessKey, token, record.getCreateTime() != null ? record.getCreateTime() : System.currentTimeMillis());
     }
 
     private void initRecord(String token, String businessKey, IdempotentTypeEnum type) {
@@ -352,6 +355,19 @@ public class TokenServiceImpl implements TokenService {
         } catch (Exception e) {
             log.warn("添加历史记录失败, businessKey={}, token={}", businessKey, token, e);
         }
+    }
+
+    private String resolveEffectiveBusinessKey(String businessKey, IdempotentRecord record, IdempotentRecord existing) {
+        if (StringUtils.isNotBlank(businessKey)) {
+            return businessKey;
+        }
+        if (record != null && StringUtils.isNotBlank(record.getBusinessKey())) {
+            return record.getBusinessKey();
+        }
+        if (existing != null && StringUtils.isNotBlank(existing.getBusinessKey())) {
+            return existing.getBusinessKey();
+        }
+        return null;
     }
 
     private String getMapStr(Map<Object, Object> map, String key) {
