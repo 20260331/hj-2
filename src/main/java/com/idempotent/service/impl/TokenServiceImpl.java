@@ -14,6 +14,8 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class TokenServiceImpl implements TokenService {
 
+    private static final String INDEX_PREFIX = "idx:";
+
     @Resource
     private RedisUtil redisUtil;
 
@@ -24,7 +26,7 @@ public class TokenServiceImpl implements TokenService {
     public String generateToken() {
         String token = UUID.randomUUID().toString().replace("-", "");
         String key = buildKey(token);
-        redisUtil.set(key, token, idempotentProperties.getExpireTime(), TimeUnit.SECONDS);
+        redisUtil.set(key, "1", idempotentProperties.getExpireTime(), TimeUnit.SECONDS);
         return token;
     }
 
@@ -34,8 +36,10 @@ public class TokenServiceImpl implements TokenService {
             return generateToken();
         }
         String token = UUID.randomUUID().toString().replace("-", "");
-        String key = buildKey(businessKey + ":" + token);
-        redisUtil.set(key, token, idempotentProperties.getExpireTime(), TimeUnit.SECONDS);
+        String key = buildKey(token);
+        String indexKey = buildIndexKey(businessKey);
+        redisUtil.set(key, businessKey, idempotentProperties.getExpireTime(), TimeUnit.SECONDS);
+        redisUtil.set(indexKey, token, idempotentProperties.getExpireTime(), TimeUnit.SECONDS);
         return token;
     }
 
@@ -67,15 +71,20 @@ public class TokenServiceImpl implements TokenService {
         if (StringUtils.isBlank(token)) {
             throw new IdempotentException(400, "幂等令牌不能为空");
         }
-        String key = buildKey(businessKey + ":" + token);
-        if (!redisUtil.hasKey(key)) {
+        String key = buildKey(token);
+        Object value = redisUtil.get(key);
+        if (value == null) {
+            return false;
+        }
+        if (!businessKey.equals(String.valueOf(value))) {
             return false;
         }
         Boolean success = redisUtil.setIfAbsent(key + ":lock", "1", 10, TimeUnit.SECONDS);
         if (success == null || !success) {
             return false;
         }
-        if (!redisUtil.hasKey(key)) {
+        value = redisUtil.get(key);
+        if (value == null || !businessKey.equals(String.valueOf(value))) {
             redisUtil.delete(key + ":lock");
             return false;
         }
@@ -85,8 +94,13 @@ public class TokenServiceImpl implements TokenService {
     @Override
     public boolean deleteToken(String token) {
         String key = buildKey(token);
+        Object value = redisUtil.get(key);
         boolean result = redisUtil.delete(key);
         redisUtil.delete(key + ":lock");
+        if (value != null && !"1".equals(String.valueOf(value))) {
+            String indexKey = buildIndexKey(String.valueOf(value));
+            redisUtil.delete(indexKey);
+        }
         return result;
     }
 
@@ -95,13 +109,19 @@ public class TokenServiceImpl implements TokenService {
         if (StringUtils.isBlank(businessKey)) {
             return deleteToken(token);
         }
-        String key = buildKey(businessKey + ":" + token);
+        String key = buildKey(token);
+        String indexKey = buildIndexKey(businessKey);
         boolean result = redisUtil.delete(key);
         redisUtil.delete(key + ":lock");
+        redisUtil.delete(indexKey);
         return result;
     }
 
     private String buildKey(String token) {
         return idempotentProperties.getPrefix() + token;
+    }
+
+    private String buildIndexKey(String businessKey) {
+        return idempotentProperties.getPrefix() + INDEX_PREFIX + businessKey;
     }
 }

@@ -58,6 +58,7 @@ public class IdempotentController {
     @Idempotent(type = com.idempotent.enums.IdempotentTypeEnum.PARAM,
             paramName = "orderNo",
             expireTime = 300,
+            deleteKeyWhenFinish = false,
             message = "该订单号正在处理中，请勿重复提交")
     public Result<Map<String, Object>> createOrderByParam(@Validated @RequestBody OrderCreateDTO orderDTO) {
         log.info("根据参数幂等创建订单: {}", orderDTO.getOrderNo());

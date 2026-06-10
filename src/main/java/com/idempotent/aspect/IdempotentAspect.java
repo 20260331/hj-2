@@ -19,6 +19,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.concurrent.TimeUnit;
 
@@ -116,10 +117,23 @@ public class IdempotentAspect {
         if (StringUtils.isNotBlank(idempotent.paramName())) {
             Object[] args = joinPoint.getArgs();
             String[] paramNames = signature.getParameterNames();
+            boolean found = false;
             for (int i = 0; i < paramNames.length; i++) {
                 if (idempotent.paramName().equals(paramNames[i])) {
                     paramKey = args[i] != null ? String.valueOf(args[i].hashCode()) : "";
+                    found = true;
                     break;
+                }
+            }
+            if (!found) {
+                for (Object arg : args) {
+                    if (arg != null && !isRequestOrResponse(arg)) {
+                        Object fieldValue = getFieldValue(arg, idempotent.paramName());
+                        if (fieldValue != null) {
+                            paramKey = String.valueOf(fieldValue.hashCode());
+                            break;
+                        }
+                    }
                 }
             }
         } else {
@@ -139,6 +153,26 @@ public class IdempotentAspect {
             return prefix + ":" + key + ":" + paramKey;
         }
         return prefix + ":" + key;
+    }
+
+    private Object getFieldValue(Object obj, String fieldName) {
+        if (obj == null || StringUtils.isBlank(fieldName)) {
+            return null;
+        }
+        Class<?> clazz = obj.getClass();
+        while (clazz != null && clazz != Object.class) {
+            try {
+                Field field = clazz.getDeclaredField(fieldName);
+                field.setAccessible(true);
+                return field.get(obj);
+            } catch (NoSuchFieldException e) {
+                clazz = clazz.getSuperclass();
+            } catch (IllegalAccessException e) {
+                log.warn("获取字段值失败: {}", fieldName, e);
+                return null;
+            }
+        }
+        return null;
     }
 
     private void cleanup(Idempotent idempotent, String key) {

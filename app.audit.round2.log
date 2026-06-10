@@ -1,0 +1,30 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::               (v2.7.18)
+
+2026-06-10 21:14:57.071  INFO 23656 --- [           main] com.idempotent.IdempotentApplication     : Starting IdempotentApplication v1.0.0 using Java 17.0.18 on DESKTOP-CJJKNVH with PID 23656 (D:\code\trae\solo\20260601\hj\hj-2\target\idempotent-service-1.0.0.jar started by ch113 in D:\code\trae\solo\20260601\hj\hj-2)
+2026-06-10 21:14:57.103  INFO 23656 --- [           main] com.idempotent.IdempotentApplication     : No active profile set, falling back to 1 default profile: "default"
+2026-06-10 21:14:59.192  INFO 23656 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-06-10 21:14:59.202  INFO 23656 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-06-10 21:14:59.277  INFO 23656 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 22 ms. Found 0 Redis repository interfaces.
+2026-06-10 21:15:01.402  INFO 23656 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port(s): 8080 (http)
+2026-06-10 21:15:01.427  INFO 23656 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-06-10 21:15:01.429  INFO 23656 --- [           main] org.apache.catalina.core.StandardEngine  : Starting Servlet engine: [Apache Tomcat/9.0.83]
+2026-06-10 21:15:01.652  INFO 23656 --- [           main] o.a.c.c.C.[.[localhost].[/idempotent]    : Initializing Spring embedded WebApplicationContext
+2026-06-10 21:15:01.655  INFO 23656 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 4407 ms
+2026-06-10 21:15:03.807  INFO 23656 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port(s): 8080 (http) with context path '/idempotent'
+2026-06-10 21:15:03.822  INFO 23656 --- [           main] com.idempotent.IdempotentApplication     : Started IdempotentApplication in 8.298 seconds (JVM running for 9.882)
+2026-06-10 21:15:30.144  INFO 23656 --- [nio-8080-exec-3] o.a.c.c.C.[.[localhost].[/idempotent]    : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-06-10 21:15:30.145  INFO 23656 --- [nio-8080-exec-3] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-06-10 21:15:30.147  INFO 23656 --- [nio-8080-exec-3] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2026-06-10 21:15:31.569  INFO 23656 --- [nio-8080-exec-4] c.i.controller.IdempotentController      : 创建订单: AUDIT-TOKEN-001
+2026-06-10 21:15:31.607  WARN 23656 --- [nio-8080-exec-8] c.i.exception.GlobalExceptionHandler     : 幂等校验失败: /idempotent/api/order/create - 订单正在处理中，请勿重复提交
+2026-06-10 21:15:31.739  INFO 23656 --- [io-8080-exec-10] c.i.controller.IdempotentController      : 创建订单: AUDIT-BIZ-001
+2026-06-10 21:15:31.756  WARN 23656 --- [nio-8080-exec-3] c.i.exception.GlobalExceptionHandler     : 幂等校验失败: /idempotent/api/order/create - 订单正在处理中，请勿重复提交
+2026-06-10 21:15:31.771  INFO 23656 --- [nio-8080-exec-4] c.i.controller.IdempotentController      : 根据参数幂等创建订单: AUDIT-PARAM-001
+2026-06-10 21:15:31.782  WARN 23656 --- [nio-8080-exec-8] c.i.exception.GlobalExceptionHandler     : 幂等校验失败: /idempotent/api/order/create-by-param - 该订单号正在处理中，请勿重复提交
