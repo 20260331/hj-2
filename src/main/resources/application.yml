@@ -24,3 +24,8 @@ idempotent:
     prefix: "idempotent:token:"
     expire-time: 600
     header-name: "Idempotent-Token"
+  receipt:
+    prefix: "idempotent:receipt:"
+    expire-days: 30
+    auto-return-receipt-on-duplicate: true
+    default-source: "AUTO"

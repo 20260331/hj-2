@@ -8,7 +8,9 @@ public enum IdempotentStatusEnum {
 
     COMPLETED(1, "已完成"),
 
-    TOKEN_EXPIRED(2, "令牌已失效");
+    TOKEN_EXPIRED(2, "令牌已失效"),
+
+    FAILED(3, "处理失败");
 
     private final Integer code;
 

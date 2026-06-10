@@ -1,5 +1,7 @@
 package com.idempotent.exception;
 
+import com.idempotent.dto.IdempotentRecord;
+import com.idempotent.dto.ReceiptDTO;
 import com.idempotent.util.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.BindException;
@@ -18,6 +20,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IdempotentException.class)
     public Result<?> handleIdempotentException(IdempotentException e, HttpServletRequest request) {
         log.warn("幂等校验失败: {} - {}", request.getRequestURI(), e.getMessage());
+        IdempotentRecord record = e.getReceiptRecord();
+        if (record != null) {
+            ReceiptDTO receiptDTO = ReceiptDTO.fromRecord(record, 0L);
+            return Result.fail(e.getCode(), e.getMessage(), receiptDTO);
+        }
         return Result.fail(e.getCode(), e.getMessage());
     }
 

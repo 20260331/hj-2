@@ -29,5 +29,11 @@ public interface TokenService {
 
     void markCompleted(String token, String businessKey, IdempotentRecord record);
 
+    void markCompleted(String token, String businessKey, IdempotentRecord record, Object response);
+
     void markFailed(String token, String businessKey, String errorMsg, IdempotentRecord record);
+
+    IdempotentRecord getLatestRecordByBusinessKey(String businessKey);
+
+    IdempotentRecord getRecordByToken(String token);
 }

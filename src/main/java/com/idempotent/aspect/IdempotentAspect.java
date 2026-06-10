@@ -3,6 +3,7 @@ package com.idempotent.aspect;
 import com.alibaba.fastjson.JSON;
 import com.idempotent.annotation.Idempotent;
 import com.idempotent.config.IdempotentProperties;
+import com.idempotent.config.ReceiptProperties;
 import com.idempotent.dto.IdempotentRecord;
 import com.idempotent.enums.IdempotentTypeEnum;
 import com.idempotent.exception.IdempotentException;
@@ -38,6 +39,9 @@ public class IdempotentAspect {
     @Resource
     private IdempotentProperties idempotentProperties;
 
+    @Resource
+    private ReceiptProperties receiptProperties;
+
     @Around("@annotation(idempotent)")
     public Object around(ProceedingJoinPoint joinPoint, Idempotent idempotent) throws Throwable {
         IdempotentTypeEnum type = idempotent.type();
@@ -48,33 +52,47 @@ public class IdempotentAspect {
 
         boolean valid = false;
         try {
+            IdempotentRecord lastRecord = null;
             switch (type) {
                 case TOKEN:
                     valid = handleTokenType(idempotent);
+                    lastRecord = findLastRecord(token, businessKey);
                     break;
                 case PARAM:
                     valid = handleParamType(key, idempotent);
                     token = "param:" + key;
+                    lastRecord = findLastRecord(token, businessKey);
                     break;
                 case TOKEN_AND_PARAM:
                     valid = handleTokenAndParamType(joinPoint, idempotent, key);
+                    lastRecord = findLastRecord(token, businessKey);
                     break;
                 default:
                     valid = handleTokenType(idempotent);
+                    lastRecord = findLastRecord(token, businessKey);
             }
 
             if (!valid) {
-                throw new IdempotentException(idempotent.message());
+                if (idempotentProperties == null || receiptProperties == null
+                        || Boolean.TRUE.equals(receiptProperties.getAutoReturnReceiptOnDuplicate())) {
+                    if (lastRecord == null && businessKey != null) {
+                        lastRecord = tokenService.getLatestRecordByBusinessKey(businessKey);
+                    }
+                }
+                throw new IdempotentException(409, idempotent.message(), lastRecord);
             }
 
             tokenService.markProcessing(token, businessKey, type, record);
 
             Object result = joinPoint.proceed();
 
-            tokenService.markCompleted(token, businessKey, record);
+            tokenService.markCompleted(token, businessKey, record, result);
 
             return result;
         } catch (Throwable throwable) {
+            if (throwable instanceof IdempotentException) {
+                throw throwable;
+            }
             if (valid) {
                 tokenService.markFailed(token, businessKey, throwable.getMessage(), record);
             }
@@ -84,6 +102,19 @@ public class IdempotentAspect {
                 cleanup(idempotent, key);
             }
         }
+    }
+
+    private IdempotentRecord findLastRecord(String token, String businessKey) {
+        if (businessKey != null) {
+            IdempotentRecord byBusiness = tokenService.getLatestRecordByBusinessKey(businessKey);
+            if (byBusiness != null) {
+                return byBusiness;
+            }
+        }
+        if (token != null) {
+            return tokenService.getRecordByToken(token);
+        }
+        return null;
     }
 
     private IdempotentRecord buildRecord(ProceedingJoinPoint joinPoint, Idempotent idempotent) {

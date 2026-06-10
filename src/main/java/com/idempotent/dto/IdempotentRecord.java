@@ -34,4 +34,14 @@ public class IdempotentRecord implements Serializable {
     private Long expireTime;
 
     private String errorMsg;
+
+    private String responseContent;
+
+    private String receiptSource;
+
+    private Long receiptTime;
+
+    private Integer responseCode;
+
+    private String responseMessage;
 }

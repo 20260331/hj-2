@@ -225,6 +225,11 @@ public class TokenServiceImpl implements TokenService {
 
     @Override
     public void markCompleted(String token, String businessKey, IdempotentRecord record) {
+        markCompleted(token, businessKey, record, null);
+    }
+
+    @Override
+    public void markCompleted(String token, String businessKey, IdempotentRecord record, Object response) {
         if (StringUtils.isBlank(token)) {
             return;
         }
@@ -237,6 +242,28 @@ public class TokenServiceImpl implements TokenService {
         record.setBusinessKey(effectiveBusinessKey);
         record.setStatus(IdempotentStatusEnum.COMPLETED);
         record.setProcessEndTime(System.currentTimeMillis());
+        record.setReceiptTime(System.currentTimeMillis());
+        record.setReceiptSource("AUTO_ASPECT");
+        if (response != null) {
+            try {
+                if (response instanceof com.idempotent.util.Result) {
+                    com.idempotent.util.Result<?> result = (com.idempotent.util.Result<?>) response;
+                    record.setResponseCode(result.getCode());
+                    record.setResponseMessage(result.getMessage());
+                    if (result.getData() != null) {
+                        record.setResponseContent(com.alibaba.fastjson.JSON.toJSONString(result.getData()));
+                    } else {
+                        record.setResponseContent(com.alibaba.fastjson.JSON.toJSONString(result));
+                    }
+                } else {
+                    record.setResponseContent(com.alibaba.fastjson.JSON.toJSONString(response));
+                    record.setResponseCode(200);
+                }
+            } catch (Exception e) {
+                log.warn("序列化返回结果失败", e);
+                record.setResponseContent(String.valueOf(response));
+            }
+        }
         saveRecord(token, record);
         addToHistory(effectiveBusinessKey, token, record.getCreateTime() != null ? record.getCreateTime() : System.currentTimeMillis());
     }
@@ -253,9 +280,11 @@ public class TokenServiceImpl implements TokenService {
         record.setToken(token);
         String effectiveBusinessKey = resolveEffectiveBusinessKey(businessKey, record, existing);
         record.setBusinessKey(effectiveBusinessKey);
-        record.setStatus(IdempotentStatusEnum.COMPLETED);
+        record.setStatus(IdempotentStatusEnum.FAILED);
         record.setProcessEndTime(System.currentTimeMillis());
         record.setErrorMsg(errorMsg);
+        record.setReceiptTime(System.currentTimeMillis());
+        record.setReceiptSource(idempotentProperties.getPrefix().contains("token") ? "AUTO_ASPECT" : "AUTO_ASPECT");
         saveRecord(token, record);
         addToHistory(effectiveBusinessKey, token, record.getCreateTime() != null ? record.getCreateTime() : System.currentTimeMillis());
     }
@@ -287,6 +316,11 @@ public class TokenServiceImpl implements TokenService {
             map.put("processEndTime", record.getProcessEndTime() != null ? record.getProcessEndTime() : 0L);
             map.put("expireTime", record.getExpireTime() != null ? record.getExpireTime() : 0L);
             map.put("errorMsg", record.getErrorMsg() != null ? record.getErrorMsg() : "");
+            map.put("responseContent", record.getResponseContent() != null ? record.getResponseContent() : "");
+            map.put("receiptSource", record.getReceiptSource() != null ? record.getReceiptSource() : "");
+            map.put("receiptTime", record.getReceiptTime() != null ? record.getReceiptTime() : 0L);
+            map.put("responseCode", record.getResponseCode() != null ? record.getResponseCode() : 0);
+            map.put("responseMessage", record.getResponseMessage() != null ? record.getResponseMessage() : "");
             redisUtil.hPutAll(recordKey, map);
             redisUtil.expire(recordKey, HISTORY_EXPIRE_DAYS, TimeUnit.DAYS);
         } catch (Exception e) {
@@ -323,11 +357,40 @@ public class TokenServiceImpl implements TokenService {
             record.setProcessEndTime(getMapLong(map, "processEndTime"));
             record.setExpireTime(getMapLong(map, "expireTime"));
             record.setErrorMsg(getMapStr(map, "errorMsg"));
+            record.setResponseContent(getMapStr(map, "responseContent"));
+            record.setReceiptSource(getMapStr(map, "receiptSource"));
+            record.setReceiptTime(getMapLong(map, "receiptTime"));
+            record.setResponseCode(getMapInt(map, "responseCode"));
+            record.setResponseMessage(getMapStr(map, "responseMessage"));
             return record;
         } catch (Exception e) {
             log.warn("获取幂等记录失败, token={}", token, e);
             return null;
         }
+    }
+
+    @Override
+    public IdempotentRecord getLatestRecordByBusinessKey(String businessKey) {
+        if (StringUtils.isBlank(businessKey)) {
+            return null;
+        }
+        String indexKey = buildIndexKey(businessKey);
+        Object tokenObj = redisUtil.get(indexKey);
+        if (tokenObj != null) {
+            IdempotentRecord record = getRecord(String.valueOf(tokenObj));
+            if (record != null) {
+                return record;
+            }
+        }
+        return getLastHistoryRecord(businessKey);
+    }
+
+    @Override
+    public IdempotentRecord getRecordByToken(String token) {
+        if (StringUtils.isBlank(token)) {
+            return null;
+        }
+        return getRecord(token);
     }
 
     private IdempotentRecord getLastHistoryRecord(String businessKey) {
